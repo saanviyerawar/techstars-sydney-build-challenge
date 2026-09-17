@@ -188,6 +188,17 @@ def normalize_profile_url(value):
     return f"https://www.linkedin.com/in/{parts[1]}/"
 
 
+def run_scraper(arguments, timeout):
+    return subprocess.run(
+        [sys.executable, str(SCRAPER_PATH), *arguments],
+        cwd=REPO_DIR,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
 @app.post("/api/scrape")
 def scrape_founder():
     payload = request.get_json(silent=True) or {}
@@ -202,20 +213,14 @@ def scrape_founder():
         return jsonify({"error": "Another profile scrape is already running."}), 409
 
     try:
-        result = subprocess.run(
+        result = run_scraper(
             [
-                sys.executable,
-                str(SCRAPER_PATH),
                 "--manual-login",
                 "--login-timeout",
                 "300",
                 profile_url,
             ],
-            cwd=REPO_DIR,
-            capture_output=True,
-            text=True,
             timeout=360,
-            check=False,
         )
         if result.returncode != 0:
             app.logger.error("Profile scrape failed: %s", result.stderr.strip())
@@ -241,6 +246,69 @@ def scrape_founder():
         return jsonify(founder), 201
     except subprocess.TimeoutExpired:
         return jsonify({"error": "The profile scrape timed out."}), 504
+    finally:
+        scrape_lock.release()
+
+
+@app.post("/api/discover")
+def discover_founders():
+    payload = request.get_json(silent=True) or {}
+    query = str(payload.get("query") or "").strip()
+    if len(query) < 2 or len(query) > 100:
+        return jsonify(
+            {"error": "Enter a discovery query between 2 and 100 characters."}
+        ), 400
+    try:
+        limit = int(payload.get("limit", 3))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Discovery limit must be a number."}), 400
+    if limit < 1 or limit > 10:
+        return jsonify({"error": "Discovery limit must be between 1 and 10."}), 400
+    if not isinstance(repository, ScrapedProfileRepository):
+        return jsonify(
+            {"error": "Live discovery is available only in scraped-data mode."}
+        ), 409
+    if not scrape_lock.acquire(blocking=False):
+        return jsonify({"error": "Another profile scrape is already running."}), 409
+
+    before = {
+        profile.get("linkedin_url")
+        for profile in repository.get_all()
+        if profile.get("linkedin_url")
+    }
+    try:
+        result = run_scraper(
+            [
+                "--manual-login",
+                "--login-timeout",
+                "300",
+                "--discover-query",
+                query,
+                "--max-profiles",
+                str(limit),
+            ],
+            timeout=120 + (limit * 5 * 60),
+        )
+        if result.returncode != 0:
+            app.logger.error("Founder discovery failed: %s", result.stderr.strip())
+            return jsonify(
+                {
+                    "error": (
+                        "LinkedIn discovery did not complete. Check the browser "
+                        "session and try again."
+                    )
+                }
+            ), 502
+
+        profiles = repository.get_all()
+        added = sum(
+            profile.get("linkedin_url") not in before
+            for profile in profiles
+            if profile.get("linkedin_url")
+        )
+        return jsonify({"added": added, "profiles": profiles})
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Founder discovery timed out."}), 504
     finally:
         scrape_lock.release()
 

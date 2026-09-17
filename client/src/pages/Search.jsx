@@ -37,6 +37,9 @@ export default function Search() {
     const [profileUrl, setProfileUrl] = useState('');
     const [scraping, setScraping] = useState(false);
     const [scrapeError, setScrapeError] = useState(null);
+    const [discoveryQuery, setDiscoveryQuery] = useState('founder Sydney');
+    const [discovering, setDiscovering] = useState(false);
+    const [discoveryMessage, setDiscoveryMessage] = useState(null);
     const foundersPerPage = 10;
 
     const indexOfLastFounder = currentPage * foundersPerPage;
@@ -95,6 +98,35 @@ export default function Search() {
             setScrapeError(error.message);
         } finally {
             setScraping(false);
+        }
+    };
+
+    const discoverProfiles = async (event) => {
+        event.preventDefault();
+        setDiscovering(true);
+        setDiscoveryMessage(null);
+
+        try {
+            const response = await fetch('/api/discover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: discoveryQuery, limit: 3 }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+            setFounders(data.profiles);
+            setCurrentPage(1);
+            setDiscoveryMessage(
+                data.added > 0
+                    ? `Added ${data.added} new founder profile${data.added === 1 ? '' : 's'}.`
+                    : 'No new profiles were found in these search results.'
+            );
+        } catch (error) {
+            setDiscoveryMessage(error.message);
+        } finally {
+            setDiscovering(false);
         }
     };
 
@@ -273,6 +305,30 @@ export default function Search() {
                     <div className="col-md-9">
                         <div className="card shadow-sm mb-4">
                             <div className="card-body">
+                                <h5 className="card-title">Discover founders automatically</h5>
+                                <p className="text-muted small">
+                                    Search LinkedIn through your authenticated browser and add up to three new profiles.
+                                </p>
+                                <form className="d-flex gap-2 mb-4" onSubmit={discoverProfiles}>
+                                    <input
+                                        type="search"
+                                        className="form-control"
+                                        placeholder="founder Sydney"
+                                        value={discoveryQuery}
+                                        onChange={(event) => setDiscoveryQuery(event.target.value)}
+                                        required
+                                    />
+                                    <button className="btn btn-primary" type="submit" disabled={discovering || scraping}>
+                                        {discovering ? 'Discovering...' : 'Discover'}
+                                    </button>
+                                </form>
+                                {discoveryMessage && (
+                                    <div className="alert alert-info" role="status">
+                                        {discoveryMessage}
+                                    </div>
+                                )}
+
+                                <hr />
                                 <h5 className="card-title">Add a real LinkedIn profile</h5>
                                 <p className="text-muted small">
                                     Enter a public profile URL. Selenium will use your local authenticated browser session.
@@ -286,7 +342,7 @@ export default function Search() {
                                         onChange={(event) => setProfileUrl(event.target.value)}
                                         required
                                     />
-                                    <button className="btn btn-primary" type="submit" disabled={scraping}>
+                                    <button className="btn btn-primary" type="submit" disabled={scraping || discovering}>
                                         {scraping ? 'Adding...' : 'Add profile'}
                                     </button>
                                 </form>

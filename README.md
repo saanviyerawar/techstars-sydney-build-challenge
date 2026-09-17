@@ -52,7 +52,9 @@ profile from `linkedin-scraper\output`; no MySQL instance is required. Set
 `DB_BACKEND=mysql` to use the original database implementation instead. On the
 Search page, paste another LinkedIn profile URL into **Add a real LinkedIn
 profile** to scrape it with the authenticated local browser session and add it
-to the searchable dataset.
+to the searchable dataset. To repopulate automatically, use **Discover founders
+automatically** with a query such as `founder Sydney`; Selenium collects profile
+URLs from LinkedIn people search and batch-scrapes up to three new results.
 
 **1. What technology did you use to build your solution?**
 We used a simple but powerful stack to move fast. The frontend was built with React, Vite.js, HTML, CSS, JavaScript, and Bootstrap for quick styling. For our backend, we use Python and Flask for the server and routing, with a MySQL database hosted on AWS RDS. The app is deployed on an AWS EC2 instance.

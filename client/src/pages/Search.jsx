@@ -34,6 +34,9 @@ export default function Search() {
     const [fundingFilter, setFundingFilter] = useState('');
     const [personaFilter, setPersonaFilter] = useState('');
     const [sortBy, setSortBy] = useState('name');
+    const [profileUrl, setProfileUrl] = useState('');
+    const [scraping, setScraping] = useState(false);
+    const [scrapeError, setScrapeError] = useState(null);
     const foundersPerPage = 10;
 
     const indexOfLastFounder = currentPage * foundersPerPage;
@@ -65,6 +68,34 @@ export default function Search() {
         setIndustryFilter('');
         setPersonaFilter('');
         setFundingFilter('');
+    };
+
+    const scrapeProfile = async (event) => {
+        event.preventDefault();
+        setScraping(true);
+        setScrapeError(null);
+
+        try {
+            const response = await fetch('/api/scrape', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: profileUrl }),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+            setFounders((current) => [
+                data,
+                ...current.filter((founder) => founder.linkedin_url !== data.linkedin_url),
+            ]);
+            setProfileUrl('');
+            setCurrentPage(1);
+        } catch (error) {
+            setScrapeError(error.message);
+        } finally {
+            setScraping(false);
+        }
     };
 
     useEffect(() => {
@@ -240,6 +271,33 @@ export default function Search() {
                     </div>
                     
                     <div className="col-md-9">
+                        <div className="card shadow-sm mb-4">
+                            <div className="card-body">
+                                <h5 className="card-title">Add a real LinkedIn profile</h5>
+                                <p className="text-muted small">
+                                    Enter a public profile URL. Selenium will use your local authenticated browser session.
+                                </p>
+                                <form className="d-flex gap-2" onSubmit={scrapeProfile}>
+                                    <input
+                                        type="url"
+                                        className="form-control"
+                                        placeholder="https://www.linkedin.com/in/profile"
+                                        value={profileUrl}
+                                        onChange={(event) => setProfileUrl(event.target.value)}
+                                        required
+                                    />
+                                    <button className="btn btn-primary" type="submit" disabled={scraping}>
+                                        {scraping ? 'Adding...' : 'Add profile'}
+                                    </button>
+                                </form>
+                                {scrapeError && (
+                                    <div className="alert alert-danger mt-3 mb-0" role="alert">
+                                        {scrapeError}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="card shadow-sm mb-4">
                             <div className="card-header bg-light d-flex justify-content-between align-items-center">
                                 <h5 className="card-title mb-0">Results <span id="result-count" className="badge bg-primary ms-2">{ founders.length }</span></h5>

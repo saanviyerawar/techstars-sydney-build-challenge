@@ -1,16 +1,21 @@
 import json
 import os
+import subprocess
+import sys
+import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
 SERVER_DIR = Path(__file__).resolve().parent
 REPO_DIR = SERVER_DIR.parent
 CLIENT_DIST = REPO_DIR / "client" / "dist"
 DEFAULT_SCRAPER_OUTPUT = REPO_DIR / "linkedin-scraper" / "output"
+SCRAPER_PATH = REPO_DIR / "linkedin-scraper" / "main.py"
+scrape_lock = threading.Lock()
 
 load_dotenv(REPO_DIR / ".env")
 load_dotenv(SERVER_DIR / ".env", override=True)
@@ -131,7 +136,6 @@ def create_repository(app):
 
 
 app = Flask(__name__)
-CORS(app)
 repository = create_repository(app)
 
 
@@ -168,6 +172,77 @@ def get_founder(profile_id):
     if founder is None:
         return jsonify({"error": "Founder not found"}), 404
     return jsonify(founder)
+
+
+def normalize_profile_url(value):
+    parsed = urlparse(str(value or "").strip())
+    host = (parsed.hostname or "").casefold()
+    parts = [part for part in parsed.path.split("/") if part]
+    if (
+        parsed.scheme != "https"
+        or host not in {"linkedin.com", "www.linkedin.com"}
+        or len(parts) != 2
+        or parts[0].casefold() != "in"
+    ):
+        return None
+    return f"https://www.linkedin.com/in/{parts[1]}/"
+
+
+@app.post("/api/scrape")
+def scrape_founder():
+    payload = request.get_json(silent=True) or {}
+    profile_url = normalize_profile_url(payload.get("url"))
+    if profile_url is None:
+        return jsonify({"error": "Enter a valid LinkedIn profile URL."}), 400
+    if not isinstance(repository, ScrapedProfileRepository):
+        return jsonify(
+            {"error": "Live scraping is available only in scraped-data mode."}
+        ), 409
+    if not scrape_lock.acquire(blocking=False):
+        return jsonify({"error": "Another profile scrape is already running."}), 409
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRAPER_PATH),
+                "--manual-login",
+                "--login-timeout",
+                "300",
+                profile_url,
+            ],
+            cwd=REPO_DIR,
+            capture_output=True,
+            text=True,
+            timeout=360,
+            check=False,
+        )
+        if result.returncode != 0:
+            app.logger.error("Profile scrape failed: %s", result.stderr.strip())
+            return jsonify(
+                {
+                    "error": (
+                        "LinkedIn did not return profile data. Confirm the profile "
+                        "is visible to your signed-in account and try again."
+                    )
+                }
+            ), 502
+
+        founder = next(
+            (
+                profile
+                for profile in repository.get_all()
+                if profile.get("linkedin_url") == profile_url
+            ),
+            None,
+        )
+        if founder is None:
+            return jsonify({"error": "The scraper produced no usable profile."}), 502
+        return jsonify(founder), 201
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "The profile scrape timed out."}), 504
+    finally:
+        scrape_lock.release()
 
 
 @app.get("/", defaults={"path": ""})

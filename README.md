@@ -3,6 +3,54 @@ Won 1st place in the Techstars x Buildclub hackathon to find hidden founder tale
 
 View demo here: https://youtu.be/4ms0X2m3uLA
 
+## Collect real profile data with Selenium
+
+The scraper uses Selenium with an authenticated Chrome session. Install Python
+3.10+ and Google Chrome, then install the repository dependencies:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Either copy `linkedin-scraper\.env.example` to `linkedin-scraper\.env` and add
+your LinkedIn credentials, or use the safer interactive login:
+
+```powershell
+python .\linkedin-scraper\main.py --manual-login `
+  https://www.linkedin.com/in/example-profile
+```
+
+For multiple profiles, put one URL per line in a text file:
+
+```powershell
+python .\linkedin-scraper\main.py --manual-login `
+  --urls-file .\linkedin-scraper\profile_urls.txt
+```
+
+Scraped JSON files are written to `linkedin-scraper\output`. Only collect and
+use data you are authorized to process, and comply with LinkedIn's terms and
+applicable privacy laws. The authenticated browser session is retained locally
+in the ignored `linkedin-scraper\.chrome-profile` directory.
+
+## Run the demo with scraped data
+
+Build the frontend, then start Flask in its default scraped-data mode:
+
+```powershell
+cd .\client
+npm ci
+npm run build
+cd ..
+uv run --with-requirements .\server\requirements-demo.txt `
+  python .\server\app.py
+```
+
+Open http://127.0.0.1:5000. The API loads the newest valid JSON file for each
+profile from `linkedin-scraper\output`; no MySQL instance is required. Set
+`DB_BACKEND=mysql` to use the original database implementation instead.
+
 **1. What technology did you use to build your solution?**
 We used a simple but powerful stack to move fast. The frontend was built with React, Vite.js, HTML, CSS, JavaScript, and Bootstrap for quick styling. For our backend, we use Python and Flask for the server and routing, with a MySQL database hosted on AWS RDS. The app is deployed on an AWS EC2 instance.
 

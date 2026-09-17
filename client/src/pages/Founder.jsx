@@ -268,6 +268,26 @@ export default function FounderProfile() {
                     <h5 className="card-title mb-0">Professional Background</h5>
                 </div>
                 <div className="card-body">
+                    {hasValue(founderData.about) && (
+                    <div className="mb-4">
+                        <h6 className="text-uppercase text-muted small">About</h6>
+                        <p className="mb-0" style={{ whiteSpace: 'pre-line' }}>
+                            {founderData.about}
+                        </p>
+                    </div>
+                    )}
+
+                    {hasValue(founderData.experiences) && (
+                    <div className="mb-4">
+                        <h6 className="text-uppercase text-muted small">Experience</h6>
+                        {founderData.experiences.map((experience, index) => (
+                            <div className="mb-3" key={index} style={{ whiteSpace: 'pre-line' }}>
+                                {experience.raw_text || experience}
+                            </div>
+                        ))}
+                    </div>
+                    )}
+
                     {/* Founded Companies */}
                     
                     {/* Previous Companies */}

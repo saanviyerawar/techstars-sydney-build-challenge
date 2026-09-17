@@ -1,136 +1,187 @@
+import json
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from mysqlSchema import FounderProfileDB
+from werkzeug.exceptions import HTTPException
 
-load_dotenv()
+SERVER_DIR = Path(__file__).resolve().parent
+REPO_DIR = SERVER_DIR.parent
+CLIENT_DIST = REPO_DIR / "client" / "dist"
+DEFAULT_SCRAPER_OUTPUT = REPO_DIR / "linkedin-scraper" / "output"
 
-mysqlPass = os.getenv('DB_PASSWORD')
+load_dotenv(REPO_DIR / ".env")
+load_dotenv(SERVER_DIR / ".env", override=True)
+
+
+def text_contains(value, expected):
+    return expected.casefold() in str(value or "").casefold()
+
+
+class ScrapedProfileRepository:
+    def __init__(self, output_dir):
+        self.output_dir = Path(output_dir)
+
+    def _profiles(self):
+        latest = {}
+        for path in self.output_dir.glob("profile_*.json"):
+            try:
+                profile = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+
+            if not profile.get("name") or not (
+                profile.get("experiences") or profile.get("educations")
+            ):
+                continue
+
+            key = profile.get("source_url") or profile.get("linkedin_url") or path.stem
+            current = latest.get(key)
+            if current is None or path.stat().st_mtime > current[0]:
+                latest[key] = (path.stat().st_mtime, profile)
+
+        profiles = []
+        for profile_id, (_, profile) in enumerate(
+            sorted(latest.values(), key=lambda item: item[1]["name"].casefold()),
+            start=1,
+        ):
+            normalized = dict(profile)
+            normalized["id"] = profile_id
+            normalized["linkedin_url"] = normalized.get(
+                "linkedin_url"
+            ) or normalized.get("source_url")
+            normalized.setdefault("tags", [])
+            profiles.append(normalized)
+        return profiles
+
+    def get_all(self):
+        return self._profiles()
+
+    def get_by_id(self, profile_id):
+        return next(
+            (profile for profile in self._profiles() if profile["id"] == profile_id),
+            None,
+        )
+
+    def search(self, filters):
+        profiles = self._profiles()
+        text_filters = {
+            "name": "name",
+            "city": "city",
+            "startup_name": "current_company",
+        }
+        exact_filters = {
+            "gender": "gender",
+            "migrant": "migrant",
+            "founder_persona": "founder_persona",
+            "curr_startup_industry": "curr_startup_industry",
+            "curr_startup_funding_stage": "curr_startup_funding_stage",
+        }
+
+        for filter_name, field in text_filters.items():
+            if filters.get(filter_name):
+                profiles = [
+                    profile
+                    for profile in profiles
+                    if text_contains(profile.get(field), filters[filter_name])
+                ]
+        for filter_name, field in exact_filters.items():
+            if filters.get(filter_name) is not None:
+                profiles = [
+                    profile
+                    for profile in profiles
+                    if str(profile.get(field, "")).casefold()
+                    == str(filters[filter_name]).casefold()
+                ]
+        for tag in filters.get("tags", []):
+            profiles = [
+                profile
+                for profile in profiles
+                if any(
+                    str(profile_tag).casefold() == tag.casefold()
+                    for profile_tag in profile.get("tags", [])
+                )
+            ]
+        return profiles
+
+
+def create_repository(app):
+    if os.getenv("DB_BACKEND", "scraped").casefold() != "mysql":
+        output_dir = os.getenv("SCRAPED_PROFILE_DIR", DEFAULT_SCRAPER_OUTPUT)
+        app.logger.info("Using scraped profile data from %s", output_dir)
+        return ScrapedProfileRepository(output_dir)
+
+    from mysqlSchema import FounderProfileDB
+
+    database = FounderProfileDB(app=app)
+
+    class MySQLRepository:
+        def get_all(self):
+            return database.getAllFounders()
+
+        def get_by_id(self, profile_id):
+            return database.getFounderById(profile_id)
+
+        def search(self, filters):
+            return database.searchFounders(filters)
+
+    return MySQLRepository()
+
 
 app = Flask(__name__)
 CORS(app)
-stealthDb = FounderProfileDB(app=app, password=mysqlPass)
+repository = create_repository(app)
 
-print(stealthDb)
 
 @app.errorhandler(Exception)
-def handle_exception(e):
-    response = {
-        "error": str(e)
+def handle_exception(error):
+    if isinstance(error, HTTPException):
+        return jsonify({"error": error.description}), error.code
+    app.logger.exception("Unhandled request error")
+    return jsonify({"error": str(error)}), 500
+
+
+@app.get("/api/search")
+def search_founders():
+    filters = {
+        "name": request.args.get("name"),
+        "city": request.args.get("city"),
+        "startup_name": request.args.get("startup"),
+        "gender": request.args.get("gender"),
+        "migrant": request.args.get("migrant"),
+        "founder_persona": request.args.get("founder_persona"),
+        "curr_startup_industry": request.args.get("curr_startup_industry"),
+        "curr_startup_funding_stage": request.args.get("curr_startup_funding_stage"),
+        "tags": request.args.getlist("tags"),
     }
-    return jsonify(response), 500
+    filters = {
+        key: value for key, value in filters.items() if value not in (None, "", [])
+    }
+    return jsonify(repository.search(filters) if filters else repository.get_all())
 
-@app.route('/api/search', methods=['GET'])
-def getData():
-    try:
-        filters = {
-            'name': request.args.get('name'),
-            'city': request.args.get('city'),
-            'startup_name': request.args.get('startup'),
-            'gender': request.args.get('gender'),
-            'current_title': request.args.get('current_title'),
-            'ethnicity': request.args.get('ethnicity'),
-            'migrant': request.args.get('migrant'),
-            'founder_persona': request.args.get('founder_persona'),
-            'curr_startup_industry': request.args.get('curr_startup_industry'),
-            'curr_startup_funding_stage': request.args.get('curr_startup_funding_stage')
-        }
 
-        tags = request.args.getlist('tags')
-        if tags:
-            filters['tags'] = tags
-            
-        # Remove keys with None or empty string values
-        filters = {k: v for k, v in filters.items() if v}
+@app.get("/api/founders/<int:profile_id>")
+def get_founder(profile_id):
+    founder = repository.get_by_id(profile_id)
+    if founder is None:
+        return jsonify({"error": "Founder not found"}), 404
+    return jsonify(founder)
 
-        if filters:
-            founders = stealthDb.searchFounders(filters)
-        else:
-            founders = stealthDb.getAllFounders()
 
-        return jsonify(founders)
-    except Exception as e:
-        print(f"Error in /search route: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/founders/<int:id>', methods=['GET'])
-def getFounder(id):
-    try:
-        founder = stealthDb.getFounderById(id)
-
-        if founder:
-            return jsonify(founder)
-        else:
-            return {}
-    except Exception as e:
-        print(f"Error in /founder/id route")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/addFounder', methods=['POST'])
-def addFounder():
-    try:
-        # Parse incoming JSON
-        founder = request.get_json()
-
-        if founder is None:
-            return jsonify({"error": "Invalid JSON"}), 400
-
-        # Normalize booleans
-        for key in ['is_current_founder', 'was_prev_founder', 'was_in_accelerator', 
-                    'was_in_scaleup', 'was_in_bigtech', 'migrant', 'ai_in_curr_startup', 'is_stealth']:
-            if key in founder:
-                founder[key] = founder[key] == "True"
-
-        def parse_bool(value):
-            return str(value).strip().lower() == "true"
-        # Insert into DB
-        stealthDb.insertFounder(
-            name=founder.get('name'),
-            linkedin_url=founder.get('linkedin_url'),
-            city=founder.get('city'),
-            current_company=founder.get('current_company'),
-            current_title=founder.get('current_title'),
-            current_job_start=founder.get('current_job_start'),
-            time_in_current_role=founder.get('time_in_current_role'),
-            is_current_founder=parse_bool(founder.get('is_current_founder', False)),
-            curr_startup_funding_stage=founder.get('curr_startup_funding_stage'),
-            curr_startup_url=founder.get('curr_startup_url'),
-            curr_startup_info=founder.get('curr_startup_info'),
-            curr_startup_industry=founder.get('curr_startup_industry'),
-            ai_in_curr_startup=parse_bool(founder.get('ai_in_curr_startup', False)),
-            was_prev_founder=parse_bool(founder.get('was_prev_founder', False)),
-            all_founded_companies=founder.get('all_founded_companies'),
-            top_degree=founder.get('top_degree'),
-            top_degree_label=founder.get('top_degree_label'),
-            top_degree_end_date=founder.get('top_degree_end_date'),
-            was_in_accelerator=parse_bool(founder.get('was_in_accelerator', False)),
-            accelerators_worked_in=founder.get('accelerators_worked_in'),
-            was_in_scaleup=parse_bool(founder.get('was_in_scaleup', False)),
-            scaleups_worked_in=founder.get('scaleups_worked_in'),
-            was_in_bigtech=parse_bool(founder.get('was_in_bigtech', False)),
-            bigtechs_worked_in=founder.get('bigtechs_worked_in'),
-            gender=founder.get('gender'),
-            migrant=founder.get('migrant', False),
-            is_stealth=parse_bool(founder.get('is_stealth', False)),
-            linkedin_follower_count=founder.get('linkedin_follower_count')
-        )
-
-        return jsonify({"message": "Founder added successfully"}), 201
-
-    except Exception as e:
-        print(f"Failed to insert founder {founder.get('name', '[unknown]')}: {e}")
-        return jsonify({"error": f"Failed to insert founder: {str(e)}"}), 500
-
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
+@app.get("/", defaults={"path": ""})
+@app.get("/<path:path>")
 def serve_frontend(path):
-    if path != "" and os.path.exists(os.path.join('../client/dist', path)):
-        return send_from_directory('../client/dist', path)
-    else:
-        # Return index.html for React Router to handle
-        return send_from_directory('../client/dist', 'index.html')
+    requested = CLIENT_DIST / path
+    if path and requested.is_file():
+        return send_from_directory(CLIENT_DIST, path)
+    if not (CLIENT_DIST / "index.html").is_file():
+        return jsonify(
+            {"error": "Frontend is not built. Run `npm run build` in client/."}
+        ), 503
+    return send_from_directory(CLIENT_DIST, "index.html")
 
-if __name__ == '__main__':
-	app.run(debug=True, host="0.0.0.0", port=5000)
 
+if __name__ == "__main__":
+    app.run(debug=os.getenv("FLASK_DEBUG") == "1", host="127.0.0.1", port=5000)

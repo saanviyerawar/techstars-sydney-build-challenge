@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export default function FounderCard({ founder }) {
   return (
@@ -28,9 +29,9 @@ export default function FounderCard({ founder }) {
               <span key={index} className="badge bg-info me-1">{badge}</span>
             ))}
           </div>
-          <a href={`/founder/${founder.id}`} className="btn btn-sm btn-outline-primary me-2">
+          <Link to={`/founder/${founder.id}`} className="btn btn-sm btn-outline-primary me-2">
             View Profile
-          </a>
+          </Link>
           <a href={founder.linkedin_url} className="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener noreferrer">
             <i className="bi bi-linkedin"></i> LinkedIn
           </a>

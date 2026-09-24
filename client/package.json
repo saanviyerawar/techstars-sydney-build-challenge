@@ -8,7 +8,8 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build",
+        "build": "npm run build:data && vite build",
+        "build:data": "uv run --no-project --with pandas --with openpyxl python ../scripts/export_static_founders.py",
         "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0",
         "preview": "vite preview"
     },

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Home() {
     return (
         <main>
@@ -8,7 +10,7 @@ export default function Home() {
                         <p className="lead text-center">Find and connect with high-potential current and future founders across Australia.</p>
                         <p className="mb-4 text-center">Our searchable database helps you discover diverse talent that's building the next wave of innovation - from scale-up veterans to PhD researchers with IP ready to spin out.</p>
                         <div className="d-grid gap-2 d-md-flex justify-content-center">
-                            <a href="/search" className="btn btn-primary btn-lg px-4 me-md-2">Start Searching</a>
+                            <Link to="/search" className="btn btn-primary btn-lg px-4 me-md-2">Start Searching</Link>
                         </div>
                     </div>
                 </div>
@@ -61,7 +63,7 @@ export default function Home() {
                             <div className="card-body">
                                 <h3 className="h5">Scale-up Alumni</h3>
                                 <p className="small">Experienced professionals from Australia's fastest-growing companies</p>
-                                <a href="/search?tags=scale-up+alum" className="stretched-link"></a>
+                                <Link to="/search" className="stretched-link" aria-label="Search scale-up alumni" />
                             </div>
                         </div>
                     </div>
@@ -70,7 +72,7 @@ export default function Home() {
                             <div className="card-body">
                                 <h3 className="h5">PhD Researchers</h3>
                                 <p className="small">Academic innovators with IP ready for commercialization</p>
-                                <a href="/search?tags=PhD+researcher" className="stretched-link"></a>
+                                <Link to="/search" className="stretched-link" aria-label="Search PhD researchers" />
                             </div>
                         </div>
                     </div>
@@ -79,7 +81,7 @@ export default function Home() {
                             <div className="card-body">
                                 <h3 className="h5">Side Project Builders</h3>
                                 <p className="small">Creators developing innovative products while employed</p>
-                                <a href="/search?tags=side+project+builder" className="stretched-link"></a>
+                                <Link to="/search" className="stretched-link" aria-label="Search side project builders" />
                             </div>
                         </div>
                     </div>
@@ -88,7 +90,7 @@ export default function Home() {
                             <div className="card-body">
                                 <h3 className="h5">Migrant Founders</h3>
                                 <p className="small">International entrepreneurs building in Australia</p>
-                                <a href="/search?tags=migrant+founder" className="stretched-link"></a>
+                                <Link to="/search" className="stretched-link" aria-label="Search migrant founders" />
                             </div>
                         </div>
                     </div>

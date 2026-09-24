@@ -8,6 +8,12 @@ import TagsDropdown from '../components/Tags';
 import MigrantDropdown from '../components/Migrant';
 import Pagination from '../components/Pagination';
 import HighestDegree from '../components/HighestEducation';
+import {
+    discoverFounders,
+    scrapeFounder,
+    searchFounders,
+    supportsLiveCollection,
+} from '../services/founders';
 import { 
     initTooltips,
     initPopovers,
@@ -16,9 +22,6 @@ import {
  } from '../../utils/helper';
 
 export default function Search() {
-    const [debouncedNameFilter, setDebouncedNameFilter] = useState('');
-    const [debouncedStartupFilter, setDebouncedStartupFilter] = useState('');
-    const [debouncedCityFilter, setDebouncedCityFilter] = useState('');
     const [founders, setFounders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -71,6 +74,7 @@ export default function Search() {
         setIndustryFilter('');
         setPersonaFilter('');
         setFundingFilter('');
+        setHighestDegreeFilter('');
     };
 
     const scrapeProfile = async (event) => {
@@ -79,15 +83,7 @@ export default function Search() {
         setScrapeError(null);
 
         try {
-            const response = await fetch('/api/scrape', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: profileUrl }),
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || `HTTP error! status: ${response.status}`);
-            }
+            const data = await scrapeFounder(profileUrl);
             setFounders((current) => [
                 data,
                 ...current.filter((founder) => founder.linkedin_url !== data.linkedin_url),
@@ -107,15 +103,7 @@ export default function Search() {
         setDiscoveryMessage(null);
 
         try {
-            const response = await fetch('/api/discover', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: discoveryQuery, limit: 3 }),
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || `HTTP error! status: ${response.status}`);
-            }
+            const data = await discoverFounders(discoveryQuery, 3);
             setFounders(data.profiles);
             setCurrentPage(1);
             setDiscoveryMessage(
@@ -144,30 +132,20 @@ export default function Search() {
     }, [highestDegreeFilter]);
 
     useEffect(() => {
-        const params = new URLSearchParams();
-    
-        if (nameFilter) params.append('name', nameFilter);
-        if (cityFilter) params.append('city', cityFilter);
-        if (startupFilter) params.append('startup', startupFilter);
-        if (genderFilter) params.append('gender', genderFilter);
-        if (migrantFilter) params.append('migrant', migrantFilter);
-        if (personaFilter) params.append('founder_persona', personaFilter);
-        if (industryFilter) params.append('curr_startup_industry', industryFilter);
-        if (fundingFilter) params.append('curr_startup_funding_stage', fundingFilter)
-
-        if (tagsFilter.length > 0) {
-            tagsFilter.forEach(tag => params.append('tags', tag)); 
-        }
-        
         setLoading(true);
+        setError(null);
 
-        fetch(`/api/search?${params.toString()}`)
-            .then((response) => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-            })
+        searchFounders({
+            name: nameFilter,
+            city: cityFilter,
+            startup: startupFilter,
+            gender: genderFilter,
+            migrant: migrantFilter,
+            founder_persona: personaFilter,
+            curr_startup_industry: industryFilter,
+            curr_startup_funding_stage: fundingFilter,
+            tags: tagsFilter,
+        })
             .then((data) => {
             setFounders(data);
             setCurrentPage(1);
@@ -179,16 +157,6 @@ export default function Search() {
             setLoading(false);
         });
     }, [nameFilter, cityFilter, startupFilter, genderFilter, migrantFilter, tagsFilter, personaFilter, industryFilter, fundingFilter]);
-
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedNameFilter(nameFilter);
-            setDebouncedStartupFilter(startupFilter);
-            setDebouncedCityFilter(cityFilter);
-        }, 5000);
-        
-        return () => clearTimeout(timer);
-    }, [nameFilter, startupFilter, cityFilter]);
 
     useEffect(() => {
     if (!loading && founders.length > 0) {
@@ -214,6 +182,7 @@ export default function Search() {
 
                 <div className="row mt-3">
                     <div className="col-md-3">
+                        {supportsLiveCollection ? (
                         <div className="card shadow-sm mb-4">
                             <div className="card-header bg-light">
                                 <h5 className="card-title mb-0">Filters</h5>
@@ -300,6 +269,12 @@ export default function Search() {
                                 </form>
                             </div>
                         </div>
+                        ) : (
+                        <div className="alert alert-info shadow-sm" role="status">
+                            This hosted edition contains the processed founder dataset.
+                            Authenticated LinkedIn discovery is available when running the project locally.
+                        </div>
+                        )}
                     </div>
                     
                     <div className="col-md-9">

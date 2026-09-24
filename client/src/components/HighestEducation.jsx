@@ -3,6 +3,7 @@ export default function HighestDegree({ value, onChange }) {
         <select 
             className="form-select" 
             id="search-degree" 
+            value={value}
             onChange={(e) => onChange(e.target.value)}
         >
             <option value="">All</option>

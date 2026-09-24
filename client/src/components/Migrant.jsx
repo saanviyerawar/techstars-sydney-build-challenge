@@ -3,6 +3,7 @@ export default function MigrantDropdown({ value, onChange }) {
         <select 
             className="form-select" 
             id="search-migrant" 
+            value={value}
             onChange={(e) => onChange(e.target.value)}
         >
             <option value="">All</option>

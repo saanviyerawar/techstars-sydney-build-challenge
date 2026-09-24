@@ -191,3 +191,4 @@ table_view.html
 linkedin-scraper/output
 linkedin-scraper/profile_urls.py
 linkedin-scraper/.chrome-profile/
+client/public/founders.json

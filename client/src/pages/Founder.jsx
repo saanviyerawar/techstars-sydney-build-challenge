@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { getFounder } from '../services/founders';
 
 export default function FounderProfile() {
     // Extract founderId from URL parameters
@@ -14,13 +15,8 @@ export default function FounderProfile() {
         setLoading(true);
         setError(null);
         
-        const response = await fetch(`/api/founders/${founderId}`);
-        
-        if (!response.ok) {
-            throw new Error(`Failed to fetch founder data: ${response.status}`);
-        }
-        
-        const data = await response.json();
+        const data = await getFounder(founderId);
+        if (!data) throw new Error('Founder not found');
         setFounderData(data);
         setLoading(false);
         } catch (err) {

@@ -56,6 +56,13 @@ to the searchable dataset. To repopulate automatically, use **Discover founders
 automatically** with a query such as `founder Sydney`; Selenium collects profile
 URLs from LinkedIn people search and batch-scrapes up to three new results.
 
+## Hosted platform
+
+Every push to `main` deploys the searchable processed dataset to GitHub Pages.
+The hosted build does not store LinkedIn credentials or run authenticated
+scraping; use the local workflow above to collect data, update
+`linkedin_processed.xlsx`, and push the refreshed dataset.
+
 **1. What technology did you use to build your solution?**
 We used a simple but powerful stack to move fast. The frontend was built with React, Vite.js, HTML, CSS, JavaScript, and Bootstrap for quick styling. For our backend, we use Python and Flask for the server and routing, with a MySQL database hosted on AWS RDS. The app is deployed on an AWS EC2 instance.
 

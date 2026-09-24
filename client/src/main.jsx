@@ -1,5 +1,5 @@
 import ReactDOM from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createHashRouter, RouterProvider } from 'react-router-dom'
 import './input.css'
 
 import App from './App'
@@ -8,7 +8,7 @@ import Search from './pages/Search'
 import FounderProfile from './pages/Founder'
 import AboutPage from './pages/About'
 
-const router = createBrowserRouter([
+const router = createHashRouter([
     {
         path: '/',
         element: <App />,
